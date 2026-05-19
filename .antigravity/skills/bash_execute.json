@@ -1,0 +1,31 @@
+{
+    "name": "bash_execute",
+    "description": "Executes a shell command in an isolated, sandboxed environment. Use this tool strictly to verify your proposed code changes by running automated tests, linters, or type checkers. It returns the standard output (stdout), standard error (stderr), and the exit code.",
+    "strict": true,
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "command": {
+                "type": "string",
+                "description": "The bash command to execute. Must be completely non-interactive. Do not chain commands excessively."
+            },
+            "cwd": {
+                "type": "string",
+                "description": "The current working directory from which to execute the command. Must be provided as an absolute path or a relative path measured from the root of the repository."
+            },
+            "timeout": {
+                "type": "integer",
+                "description": "The maximum execution time permitted in seconds. This prevents hanging processes. Generally, keep this under 60 seconds unless you are invoking extensive test suites.",
+                "minimum": 1,
+                "maximum": 300,
+                "default": 30
+            }
+        },
+        "required": [
+            "command",
+            "cwd",
+            "timeout"
+        ],
+        "additionalProperties": false
+    }
+}

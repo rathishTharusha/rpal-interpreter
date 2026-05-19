@@ -1,0 +1,6 @@
+let n = 5 in
+Print (
+    n > 0 -> 'Positive' |
+    n < 0 -> 'Negative' |
+    'Zero'
+)

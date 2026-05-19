@@ -1,0 +1,9 @@
+let a = 10 in
+let b = 25 in
+let c = 15 in 
+Print (
+    a > b ->
+        ( a > c -> a | c )
+    |
+        ( b > c -> b | c )
+)

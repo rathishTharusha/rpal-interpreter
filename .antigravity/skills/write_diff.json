@@ -1,0 +1,41 @@
+{
+    "name": "write_diff",
+    "description": "Proposes a code change using a semantic search-and-replace block methodology. The search block must perfectly match the existing code in the file, including all whitespace, indentation, escaping, and trailing spaces. The replace block contains the newly generated code.",
+    "strict": true,
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "file_path": {
+                "type": "string",
+                "description": "The relative path to the specific file undergoing modification."
+            },
+            "changes": {
+                "type": "array",
+                "description": "An array containing discrete, proposed code changes. Each item represents a single search and replace operation within the specified file.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "search_block": {
+                            "type": "string",
+                            "description": "The exact, literal lines of code to be replaced. You MUST include sufficient surrounding context lines (before and after the target lines) to ensure the match is uniquely identifiable within the entire file. Do not omit any characters, containers, or whitespace."
+                        },
+                        "replace_block": {
+                            "type": "string",
+                            "description": "The exact, literal lines of code that will seamlessly replace the search_block."
+                        }
+                    },
+                    "required": [
+                        "search_block",
+                        "replace_block"
+                    ],
+                    "additionalProperties": false
+                }
+            }
+        },
+        "required": [
+            "file_path",
+            "changes"
+        ],
+        "additionalProperties": false
+    }
+}

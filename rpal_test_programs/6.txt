@@ -1,0 +1,15 @@
+let rec reverse (n, rev) =
+    n eq 0 -> rev |
+    reverse (n / 10, rev * 10 + (n - (n / 10) * 10))
+in
+let is_palindrome n =
+    n eq reverse(n, 0)
+in
+let rec get_palindromes (curr, max) =
+    curr > max -> nil |
+    is_palindrome curr -> (curr, get_palindromes (curr+1, max)) |
+    get_palindromes (curr+1, max)
+in
+let start_val = 10 in
+let end_val = 150 in
+Print (get_palindromes (start_val, end_val))

@@ -1,0 +1,6 @@
+let rec sum_n n =
+    n eq 0 -> 0 | 
+    n + sum_n (n-1)
+in
+let n = 10 in
+Print (sum_n n)
