@@ -1,4 +1,5 @@
 #include "Parser.h"
+#include "Standardizer.h"
 #include <iostream>
 #include <cstring>
 
@@ -28,8 +29,11 @@ int main(int argc, char** argv) {
         Parser parser(filename);
         auto ast = parser.parse();
         
+        Standardizer st;
+        auto standardizedTree = st.standardize(ast);
+        
         if (printAST) {
-            parser.printAST(ast);
+            parser.printAST(standardizedTree);
         }
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
