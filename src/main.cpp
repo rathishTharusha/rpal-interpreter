@@ -1,34 +1,35 @@
-#include "Lexer.h"
+#include "Parser.h"
 #include <iostream>
-
-std::string getTokenTypeName(TokenType type) {
-    switch (type) {
-        case TokenType::IDENTIFIER: return "IDENTIFIER";
-        case TokenType::INTEGER: return "INTEGER";
-        case TokenType::STRING: return "STRING";
-        case TokenType::OPERATOR: return "OPERATOR";
-        case TokenType::PUNCTUATION: return "PUNCTUATION";
-        case TokenType::END_OF_FILE: return "EOF";
-        case TokenType::DELETE_TOKEN: return "DELETE";
-        case TokenType::UNKNOWN: return "UNKNOWN";
-        default: return "INVALID";
-    }
-}
+#include <cstring>
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        std::cerr << "Usage: ./rpal20 <filename>\n";
+        std::cerr << "Usage: ./rpal20 [-ast] <filename>\n";
         return 1;
     }
 
-    std::string filename = argv[1];
+    bool printAST = false;
+    std::string filename;
+
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "-ast") == 0) {
+            printAST = true;
+        } else {
+            filename = argv[i];
+        }
+    }
+
+    if (filename.empty()) {
+        std::cerr << "Error: No input file specified.\n";
+        return 1;
+    }
     
     try {
-        Lexer lexer(filename);
-        std::vector<Token> tokens = lexer.getAllTokens();
+        Parser parser(filename);
+        auto ast = parser.parse();
         
-        for (const auto& token : tokens) {
-            std::cout << "<" << getTokenTypeName(token.type) << "> : " << token.value << std::endl;
+        if (printAST) {
+            parser.printAST(ast);
         }
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
