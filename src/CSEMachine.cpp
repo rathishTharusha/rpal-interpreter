@@ -75,10 +75,18 @@ std::shared_ptr<CSEItem> CSEMachine::createItemFromNode(std::shared_ptr<TreeNode
     if (node->type == "nil") return std::make_shared<CSEItem>(ItemType::NIL);
     if (node->type == "dummy" || node->type == "()") return std::make_shared<CSEItem>(ItemType::DUMMY);
     if (node->type == "Ystar") return std::make_shared<CSEItem>(ItemType::PRIMITIVE_FUNC, "Ystar");
+    if (node->type == "tau") {
+        auto item = std::make_shared<CSEItem>(ItemType::TUPLE, "tau");
+        int count = 0;
+        auto c = node->child;
+        while (c) { count++; c = c->sibling; }
+        item->bound_vars.push_back(std::to_string(count));
+        return item;
+    }
     if (node->type == "<IDENTIFIER>") {
         std::string v = node->value;
         if (v == "Print" || v == "Stern" || v == "Stem" || v == "Conc" || v == "Order" || v == "Null" || 
-            v == "Isinteger" || v == "Isstring" || v == "Istuple" || v == "Istruthvalue" || v == "Isfunction" || v == "ItoS" || v == "Cond" || v == "aug") {
+            v == "Isinteger" || v == "Isstring" || v == "Istuple" || v == "Istruthvalue" || v == "Isfunction" || v == "ItoS" || v == "Cond" || v == "aug" || v == "Ystar") {
             return std::make_shared<CSEItem>(ItemType::PRIMITIVE_FUNC, v);
         }
         return std::make_shared<CSEItem>(ItemType::IDENTIFIER, v);
@@ -92,10 +100,17 @@ void CSEMachine::evaluate() {
         auto item = control.back();
         control.pop_back();
 
+        /*
+        std::cout << "EVAL: "; printItem(item); std::cout << "\n";
+        std::cout << "  Stack: "; if (!stack.empty()) printItem(stack.back()); std::cout << "\n";
+        */
+
         if (item->type == ItemType::INTEGER || item->type == ItemType::STRING || 
             item->type == ItemType::TRUTH_VALUE || item->type == ItemType::DUMMY || 
             item->type == ItemType::NIL || item->type == ItemType::CLOSURE || 
-            item->type == ItemType::PRIMITIVE_FUNC || item->type == ItemType::TUPLE || item->type == ItemType::ETA_CLOSURE) {
+            item->type == ItemType::PRIMITIVE_FUNC || 
+            (item->type == ItemType::TUPLE && item->value != "tau") || 
+            item->type == ItemType::ETA_CLOSURE) {
             stack.push_back(item);
         }
         else if (item->type == ItemType::IDENTIFIER) {
@@ -103,7 +118,9 @@ void CSEMachine::evaluate() {
             if (!val) {
                 // Not found, treat as string? Actually RPAL errors if unassigned, but some envs treat unbound as strings. Let's error.
                 if (item->value == "Print") stack.push_back(std::make_shared<CSEItem>(ItemType::PRIMITIVE_FUNC, "Print"));
-                else throw std::runtime_error("Undeclared identifier: " + item->value);
+                else {
+                    throw std::runtime_error("Undeclared identifier: " + item->value);
+                }
             } else {
                 stack.push_back(val);
             }
@@ -117,6 +134,14 @@ void CSEMachine::evaluate() {
             stack.push_back(closure);
         }
         else if (item->type == ItemType::GAMMA) {
+            if (stack.size() < 2) {
+                std::cout << "GAMMA Underflow! Stack contents:\n";
+                for (auto& s : stack) printItem(s);
+                std::cout << "\nControl contents:\n";
+                for (auto& c : control) printItem(c);
+                std::cout << "\n";
+                throw std::runtime_error("Stack underflow in GAMMA. Stack size: " + std::to_string(stack.size()));
+            }
             auto rand = stack.back(); stack.pop_back();
             auto rator = stack.back(); stack.pop_back();
 
@@ -131,9 +156,10 @@ void CSEMachine::evaluate() {
                     new_env->bindings[rator->bound_var] = rand;
                 }
                 
-                current_env = new_env;
                 auto env_marker = std::make_shared<CSEItem>(ItemType::ENV_MARKER, std::to_string(new_env->id));
                 env_marker->env_ptr = new_env;
+                env_marker->previous_env = current_env;
+                current_env = new_env;
                 control.push_back(env_marker);
                 stack.push_back(env_marker);
                 
@@ -202,13 +228,21 @@ void CSEMachine::evaluate() {
             }
         }
         else if (item->type == ItemType::ENV_MARKER) {
-            current_env = item->env_ptr->parent;
-            // Pop matching marker from stack (the second item from top usually)
-            // Wait, we just need to remove env_marker from S.
-            // S top is the result value. S top-1 is env_marker.
+            current_env = item->previous_env;
+            if (stack.size() < 2) throw std::runtime_error("Stack underflow in ENV_MARKER");
             auto result = stack.back(); stack.pop_back();
             auto marker = stack.back(); stack.pop_back();
             stack.push_back(result);
+        }
+        else if (item->type == ItemType::TUPLE && item->value == "tau") {
+            int n = std::stoi(item->bound_vars[0]);
+            if (stack.size() < (size_t)n) throw std::runtime_error("Stack underflow in tau");
+            auto tuple = std::make_shared<CSEItem>(ItemType::TUPLE);
+            for (int i = 0; i < n; ++i) {
+                tuple->tuple_items.insert(tuple->tuple_items.begin(), stack.back());
+                stack.pop_back();
+            }
+            stack.push_back(tuple);
         }
         else if (item->type == ItemType::OPERATOR) {
             if (item->value == "beta") {
@@ -228,6 +262,7 @@ void CSEMachine::evaluate() {
 }
 
 void CSEMachine::applyPrimitive(const std::string& func_name) {
+    if (stack.size() < 1) throw std::runtime_error("Stack underflow in applyPrimitive: " + func_name);
     auto rand = stack.back(); stack.pop_back();
     if (func_name == "Print") {
         printItem(rand);
@@ -238,9 +273,17 @@ void CSEMachine::applyPrimitive(const std::string& func_name) {
     } else if (func_name == "Stern") {
         stack.push_back(std::make_shared<CSEItem>(ItemType::STRING, rand->value.substr(1)));
     } else if (func_name == "Conc") {
-        auto partial = std::make_shared<CSEItem>(ItemType::PRIMITIVE_FUNC, "Conc1");
-        partial->tuple_items.push_back(rand); 
-        stack.push_back(partial);
+        if (rand->type == ItemType::TUPLE) {
+            std::string res = "";
+            for (auto& item : rand->tuple_items) {
+                res += item->value;
+            }
+            stack.push_back(std::make_shared<CSEItem>(ItemType::STRING, res));
+        } else {
+            auto partial = std::make_shared<CSEItem>(ItemType::PRIMITIVE_FUNC, "Conc1");
+            partial->tuple_items.push_back(rand); 
+            stack.push_back(partial);
+        }
     } else if (func_name == "aug") {
         auto partial = std::make_shared<CSEItem>(ItemType::PRIMITIVE_FUNC, "aug1");
         partial->tuple_items.push_back(rand); 
@@ -262,10 +305,15 @@ void CSEMachine::applyPrimitive(const std::string& func_name) {
         stack.push_back(std::make_shared<CSEItem>(ItemType::TRUTH_VALUE, (rand->type == ItemType::NIL || (rand->type == ItemType::TUPLE && rand->tuple_items.size() == 0)) ? "true" : "false"));
     } else if (func_name == "ItoS") {
         stack.push_back(std::make_shared<CSEItem>(ItemType::STRING, rand->value));
+    } else if (func_name == "Cond") {
+        auto partial = std::make_shared<CSEItem>(ItemType::PRIMITIVE_FUNC, "Cond1");
+        partial->tuple_items.push_back(rand);
+        stack.push_back(partial);
     }
 }
 
 void CSEMachine::applyBinaryOp(const std::string& op) {
+    if (stack.size() < 2) throw std::runtime_error("Stack underflow in applyBinaryOp: " + op);
     auto rand2 = stack.back(); stack.pop_back();
     auto rand1 = stack.back(); stack.pop_back();
 
@@ -282,9 +330,22 @@ void CSEMachine::applyBinaryOp(const std::string& op) {
     else if (op == "<=" || op == "le") stack.push_back(std::make_shared<CSEItem>(ItemType::TRUTH_VALUE, std::stoi(rand1->value) <= std::stoi(rand2->value) ? "true" : "false"));
     else if (op == "or") stack.push_back(std::make_shared<CSEItem>(ItemType::TRUTH_VALUE, (rand1->value == "true" || rand2->value == "true") ? "true" : "false"));
     else if (op == "&") stack.push_back(std::make_shared<CSEItem>(ItemType::TRUTH_VALUE, (rand1->value == "true" && rand2->value == "true") ? "true" : "false"));
+    else if (op == "aug") {
+        auto res = std::make_shared<CSEItem>(ItemType::TUPLE);
+        if (rand1->type == ItemType::TUPLE) {
+            res->tuple_items = rand1->tuple_items;
+        } else if (rand1->type != ItemType::NIL) {
+            res->tuple_items.push_back(rand1);
+        }
+        res->tuple_items.push_back(rand2);
+        stack.push_back(res);
+    } else {
+        throw std::runtime_error("Unhandled binary operator: '" + op + "'");
+    }
 }
 
 void CSEMachine::applyUnaryOp(const std::string& op) {
+    if (stack.size() < 1) throw std::runtime_error("Stack underflow in applyUnaryOp: " + op);
     auto rand = stack.back(); stack.pop_back();
     if (op == "not") stack.push_back(std::make_shared<CSEItem>(ItemType::TRUTH_VALUE, rand->value == "true" ? "false" : "true"));
     else if (op == "neg") stack.push_back(std::make_shared<CSEItem>(ItemType::INTEGER, std::to_string(-std::stoi(rand->value))));
@@ -296,7 +357,16 @@ void CSEMachine::printItem(std::shared_ptr<CSEItem> item, bool is_conc) {
     else if (item->type == ItemType::TRUTH_VALUE) std::cout << item->value;
     else if (item->type == ItemType::DUMMY) std::cout << "dummy";
     else if (item->type == ItemType::NIL) std::cout << "nil";
-    else if (item->type == ItemType::CLOSURE) std::cout << "[closure]";
+    else if (item->type == ItemType::CLOSURE) {
+        std::cout << "[lambda closure: " << item->bound_var << ": " << item->delta_index << "]";
+    }
+    else if (item->type == ItemType::ETA_CLOSURE) std::cout << "[eta closure]";
+    else if (item->type == ItemType::GAMMA) std::cout << "GAMMA ";
+    else if (item->type == ItemType::ENV_MARKER) std::cout << "ENV(" << item->value << ") ";
+    else if (item->type == ItemType::IDENTIFIER) std::cout << "ID(" << item->value << ") ";
+    else if (item->type == ItemType::OPERATOR) std::cout << "OP(" << item->value << ") ";
+    else if (item->type == ItemType::LAMBDA) std::cout << "LAMBDA(" << item->delta_index << ") ";
+    else if (item->type == ItemType::PRIMITIVE_FUNC) std::cout << "PRIM(" << item->value << ") ";
     else if (item->type == ItemType::TUPLE) {
         std::cout << "(";
         for (size_t i = 0; i < item->tuple_items.size(); ++i) {

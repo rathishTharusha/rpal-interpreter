@@ -274,13 +274,7 @@ void Parser::R() {
 }
 
 void Parser::Rn() {
-    if (currentToken.type == TokenType::IDENTIFIER) {
-        readToken(TokenType::IDENTIFIER);
-    } else if (currentToken.type == TokenType::INTEGER) {
-        readToken(TokenType::INTEGER);
-    } else if (currentToken.type == TokenType::STRING) {
-        readToken(TokenType::STRING);
-    } else if (currentToken.value == "true") {
+    if (currentToken.value == "true") {
         read("true");
         buildTree("true", "", 0);
     } else if (currentToken.value == "false") {
@@ -289,13 +283,19 @@ void Parser::Rn() {
     } else if (currentToken.value == "nil") {
         read("nil");
         buildTree("nil", "", 0);
+    } else if (currentToken.value == "dummy") {
+        read("dummy");
+        buildTree("dummy", "", 0);
     } else if (currentToken.value == "(") {
         read("(");
         E();
         read(")");
-    } else if (currentToken.value == "dummy") {
-        read("dummy");
-        buildTree("dummy", "", 0);
+    } else if (currentToken.type == TokenType::IDENTIFIER) {
+        readToken(TokenType::IDENTIFIER);
+    } else if (currentToken.type == TokenType::INTEGER) {
+        readToken(TokenType::INTEGER);
+    } else if (currentToken.type == TokenType::STRING) {
+        readToken(TokenType::STRING);
     } else {
         throw std::runtime_error("Unexpected token in Rn(): " + currentToken.value + " at line " + std::to_string(currentToken.lineNumber));
     }

@@ -1,0 +1,20 @@
+# Build Artifacts
+obj/
+rpal20
+rpal20.exe
+*.o
+*.exe
+*.dll
+
+# Temporary logs and test traces
+*.txt
+trace.txt
+actual.txt
+expected.txt
+
+# Private Tooling / Configuration
+.antigravity/
+.gemini/
+.vscode/
+.idea/
+-p/

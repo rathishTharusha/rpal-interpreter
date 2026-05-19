@@ -30,10 +30,16 @@ int main(int argc, char** argv) {
         Parser parser(filename);
         auto ast = parser.parse();
         
+        if (printAST) {
+            std::cout << "Original AST:\n";
+            parser.printAST(ast);
+        }
+        
         Standardizer st;
         auto standardizedTree = st.standardize(ast);
         
         if (printAST) {
+            std::cout << "\nStandardized AST:\n";
             parser.printAST(standardizedTree);
         } else {
             CSEMachine machine(standardizedTree);

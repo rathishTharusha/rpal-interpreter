@@ -27,6 +27,7 @@ public:
     std::string bound_var;
     std::vector<std::string> bound_vars; // For multiple vars in tuple
     std::vector<std::shared_ptr<CSEItem>> tuple_items;
+    std::shared_ptr<Environment> previous_env; // For env_marker to restore the caller's environment
     std::shared_ptr<CSEItem> closure_ptr; // For eta-closure
 
     CSEItem(ItemType t, std::string v = "") : type(t), value(v), delta_index(-1), env_ptr(nullptr) {}

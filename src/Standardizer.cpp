@@ -5,6 +5,51 @@ std::shared_ptr<TreeNode> Standardizer::makeNode(const std::string& type, const 
     return std::make_shared<TreeNode>(type, value);
 }
 
+std::shared_ptr<TreeNode> Standardizer::createLambda(std::shared_ptr<TreeNode> V, std::shared_ptr<TreeNode> E) {
+    if (V->type == ",") {
+        auto T = makeNode("<IDENTIFIER>", "T++");
+        auto current_body = E;
+        
+        std::vector<std::shared_ptr<TreeNode>> vars;
+        auto v = V->child;
+        while (v) {
+            auto next = v->sibling;
+            v->setSibling(nullptr);
+            vars.push_back(v);
+            v = next;
+        }
+        
+        for (int i = (int)vars.size() - 1; i >= 0; --i) {
+            auto gamma_app = makeNode("gamma");
+            auto lambda_inner = makeNode("lambda");
+            auto gamma_tuple = makeNode("gamma");
+            auto T_ref = makeNode("<IDENTIFIER>", "T++");
+            auto index = makeNode("<INTEGER>", std::to_string(i + 1));
+            
+            gamma_tuple->setChild(T_ref);
+            T_ref->setSibling(index);
+            
+            lambda_inner->setChild(vars[i]);
+            vars[i]->setSibling(current_body);
+            
+            gamma_app->setChild(lambda_inner);
+            lambda_inner->setSibling(gamma_tuple);
+            
+            current_body = gamma_app;
+        }
+        
+        auto final_lambda = makeNode("lambda");
+        final_lambda->setChild(T);
+        T->setSibling(current_body);
+        return final_lambda;
+    } else {
+        auto final_lambda = makeNode("lambda");
+        final_lambda->setChild(V);
+        V->setSibling(E);
+        return final_lambda;
+    }
+}
+
 std::shared_ptr<TreeNode> Standardizer::standardize(std::shared_ptr<TreeNode> root) {
     if (!root) return nullptr;
     return standardizeNode(root);
@@ -13,8 +58,6 @@ std::shared_ptr<TreeNode> Standardizer::standardize(std::shared_ptr<TreeNode> ro
 std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode> node) {
     if (!node) return nullptr;
 
-    // Post-order traversal: standardize children and siblings first
-    // Note: To avoid messing up sibling pointers while transforming, we process children and siblings recursively.
     if (node->child) {
         node->child = standardizeNode(node->child);
     }
@@ -22,8 +65,8 @@ std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode
         node->sibling = standardizeNode(node->sibling);
     }
 
-    // Now apply standardizer rules to the current node
     std::string t = node->type;
+    std::shared_ptr<TreeNode> result = node;
 
     if (t == "let") {
         auto eq = node->child;
@@ -33,14 +76,12 @@ std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode
         auto P = eq->sibling;
         
         auto gamma = makeNode("gamma");
-        auto lambda = makeNode("lambda");
+        auto lambda = createLambda(X, P);
         
         gamma->setChild(lambda);
         lambda->setSibling(E);
-        lambda->setChild(X);
-        X->setSibling(P);
         
-        return gamma;
+        result = gamma;
     }
     else if (t == "where") {
         auto P = node->child;
@@ -49,16 +90,14 @@ std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode
         auto X = eq->child;
         auto E = X->sibling;
         
+        P->setSibling(nullptr);
         auto gamma = makeNode("gamma");
-        auto lambda = makeNode("lambda");
+        auto lambda = createLambda(X, P);
         
         gamma->setChild(lambda);
         lambda->setSibling(E);
-        lambda->setChild(X);
-        X->setSibling(P);
-        P->setSibling(nullptr);
         
-        return gamma;
+        result = gamma;
     }
     else if (t == "within") {
         auto eq1 = node->child;
@@ -69,21 +108,19 @@ std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode
         auto X2 = eq2->child;
         auto E2 = X2->sibling;
         
+        E1->setSibling(nullptr);
+        E2->setSibling(nullptr);
+        
         auto new_eq = makeNode("=");
         auto gamma = makeNode("gamma");
-        auto lambda = makeNode("lambda");
+        auto lambda = createLambda(X1, E2);
         
         new_eq->setChild(X2);
         X2->setSibling(gamma);
         gamma->setChild(lambda);
         lambda->setSibling(E1);
-        lambda->setChild(X1);
-        X1->setSibling(E2);
         
-        E1->setSibling(nullptr);
-        E2->setSibling(nullptr);
-        
-        return new_eq;
+        result = new_eq;
     }
     else if (t == "rec") {
         auto eq = node->child;
@@ -91,24 +128,21 @@ std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode
         auto X = eq->child;
         auto E = X->sibling;
         
+        E->setSibling(nullptr);
+        
         auto new_eq = makeNode("=");
         auto gamma = makeNode("gamma");
         auto ystar = makeNode("<IDENTIFIER>", "Ystar");
-        auto lambda = makeNode("lambda");
         
-        // Need a deep copy of X for the lambda
         auto X_copy = makeNode(X->type, X->value);
+        auto lambda = createLambda(X_copy, E);
         
         new_eq->setChild(X);
         X->setSibling(gamma);
         gamma->setChild(ystar);
         ystar->setSibling(lambda);
-        lambda->setChild(X_copy);
-        X_copy->setSibling(E);
         
-        E->setSibling(nullptr);
-        
-        return new_eq;
+        result = new_eq;
     }
     else if (t == "fcn_form") {
         auto P = node->child;
@@ -117,24 +151,43 @@ std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode
         auto new_eq = makeNode("=");
         new_eq->setChild(P);
         
-        auto current_lambda = makeNode("lambda");
-        P->setSibling(current_lambda);
+        std::vector<std::shared_ptr<TreeNode>> vars;
+        auto curr_V = V;
+        while (curr_V->sibling) {
+            auto next = curr_V->sibling;
+            curr_V->setSibling(nullptr);
+            vars.push_back(curr_V);
+            curr_V = next;
+        }
+        auto E = curr_V;
         
-        auto current_V = V;
-        while (current_V->sibling && current_V->sibling->sibling) { // loop until the node before E
-            current_lambda->setChild(current_V);
-            auto next_lambda = makeNode("lambda");
-            auto next_V = current_V->sibling;
-            current_V->setSibling(next_lambda);
-            current_lambda = next_lambda;
-            current_V = next_V;
+        auto current_body = E;
+        for (int i = (int)vars.size() - 1; i >= 0; --i) {
+            current_body = createLambda(vars[i], current_body);
         }
         
-        current_lambda->setChild(current_V);
-        auto E = current_V->sibling;
-        current_V->setSibling(E);
+        P->setSibling(current_body);
+        result = new_eq;
+    }
+    else if (t == "@") {
+        auto E1 = node->child;
+        auto N = E1->sibling;
+        auto E2 = N->sibling;
         
-        return new_eq;
+        E1->setSibling(nullptr);
+        N->setSibling(nullptr);
+        E2->setSibling(nullptr);
+        
+        auto gamma1 = makeNode("gamma");
+        auto gamma2 = makeNode("gamma");
+        
+        gamma1->setChild(gamma2);
+        gamma2->setSibling(E2);
+        
+        gamma2->setChild(N);
+        N->setSibling(E1);
+        
+        result = gamma1;
     }
     else if (t == "and") {
         auto new_eq = makeNode("=");
@@ -168,7 +221,7 @@ std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode
         comma->setChild(first_X);
         tau->setChild(first_E);
         
-        return new_eq;
+        result = new_eq;
     }
     else if (t == "@") {
         auto E1 = node->child;
@@ -186,7 +239,7 @@ std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode
         E1->setSibling(nullptr);
         E2->setSibling(nullptr);
         
-        return gamma1;
+        result = gamma1;
     }
     else if (t == "->") {
         auto B = node->child;
@@ -218,7 +271,7 @@ std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode
         dummy2->setSibling(E);
         E->setSibling(nullptr);
         
-        return gamma1;
+        result = gamma1;
     }
     else if (t == "tau") {
         std::vector<std::shared_ptr<TreeNode>> children;
@@ -230,7 +283,6 @@ std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode
             c = next;
         }
         
-        // Evaluate tau recursively to build augmented tuples with nil
         auto res = makeNode("nil");
         for (size_t i = 0; i < children.size(); ++i) {
             auto gamma1 = makeNode("gamma");
@@ -244,96 +296,40 @@ std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode
             
             res = gamma1;
         }
-        return res;
+        result = res;
     }
-    else if (t == "not") {
-        auto E = node->child;
-        auto gamma = makeNode("gamma");
-        auto not_node = makeNode("<IDENTIFIER>", "not");
-        
-        gamma->setChild(not_node);
-        not_node->setSibling(E);
-        E->setSibling(nullptr);
-        
-        return gamma;
-    }
-    else if (t == "neg") {
-        auto E = node->child;
-        auto gamma = makeNode("gamma");
-        auto neg_node = makeNode("<IDENTIFIER>", "neg");
-        
-        gamma->setChild(neg_node);
-        neg_node->setSibling(E);
-        E->setSibling(nullptr);
-        
-        return gamma;
-    }
-    // lambda (multi-variable)
+
     else if (t == "lambda") {
         auto child1 = node->child;
         if (!child1) return node;
 
         if (child1->type == ",") {
-            // ('lambda' (',' V1 V2 ... Vn) E) -> Nested lambda extraction mapping to X.i components
-            auto comma = child1;
-            auto E = comma->sibling;
-            
-            auto T = makeNode("<IDENTIFIER>", "T++");
-            auto current_body = E;
-            
-            std::vector<std::shared_ptr<TreeNode>> vars;
-            auto v = comma->child;
-            while (v) {
-                auto next = v->sibling;
-                v->setSibling(nullptr);
-                vars.push_back(v);
-                v = next;
-            }
-            
-            for (int i = (int)vars.size() - 1; i >= 0; --i) {
-                auto gamma_app = makeNode("gamma");
-                auto lambda_inner = makeNode("lambda");
-                auto gamma_tuple = makeNode("gamma");
-                auto T_ref = makeNode("<IDENTIFIER>", "T++");
-                auto index = makeNode("<INTEGER>", std::to_string(i + 1));
-                
-                gamma_tuple->setChild(T_ref);
-                T_ref->setSibling(index);
-                
-                lambda_inner->setChild(vars[i]);
-                vars[i]->setSibling(current_body);
-                
-                gamma_app->setChild(lambda_inner);
-                lambda_inner->setSibling(gamma_tuple);
-                
-                current_body = gamma_app;
-            }
-            
-            auto final_lambda = makeNode("lambda");
-            final_lambda->setChild(T);
-            T->setSibling(current_body);
-            
-            return final_lambda;
+            auto E = child1->sibling;
+            child1->setSibling(nullptr);
+            result = createLambda(child1, E);
         } 
         else if (child1->sibling && child1->sibling->sibling) {
-            // currying: lambda V1 V2 ... Vn E -> lambda V1 (lambda V2 (... (lambda Vn E)))
-            auto V = child1;
-            auto current_lambda = makeNode("lambda");
-            auto root_lambda = current_lambda;
-            
-            while (V->sibling && V->sibling->sibling) {
-                current_lambda->setChild(V);
-                auto next_lambda = makeNode("lambda");
-                auto next_V = V->sibling;
-                V->setSibling(next_lambda);
-                current_lambda = next_lambda;
-                V = next_V;
+            std::vector<std::shared_ptr<TreeNode>> vars;
+            auto curr_V = child1;
+            while (curr_V->sibling) {
+                auto next = curr_V->sibling;
+                curr_V->setSibling(nullptr);
+                vars.push_back(curr_V);
+                curr_V = next;
             }
-            current_lambda->setChild(V);
-            // V->sibling is already E
-            return root_lambda;
+            auto E = curr_V;
+            
+            auto current_body = E;
+            for (int i = (int)vars.size() - 1; i >= 0; --i) {
+                current_body = createLambda(vars[i], current_body);
+            }
+            result = current_body;
         }
     }
 
-    return node;
+    if (result != node) {
+        result->setSibling(node->sibling);
+    }
+
+    return result;
 }
