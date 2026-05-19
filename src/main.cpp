@@ -1,5 +1,6 @@
 #include "Parser.h"
 #include "Standardizer.h"
+#include "CSEMachine.h"
 #include <iostream>
 #include <cstring>
 
@@ -34,6 +35,9 @@ int main(int argc, char** argv) {
         
         if (printAST) {
             parser.printAST(standardizedTree);
+        } else {
+            CSEMachine machine(standardizedTree);
+            machine.evaluate();
         }
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
