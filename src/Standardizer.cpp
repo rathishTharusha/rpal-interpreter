@@ -1,15 +1,28 @@
 #include "Standardizer.h"
 #include <iostream>
 
+/**
+ * @brief Helper utility to create a new tree node.
+ */
 std::shared_ptr<TreeNode> Standardizer::makeNode(const std::string& type, const std::string& value) {
     return std::make_shared<TreeNode>(type, value);
 }
 
+/**
+ * @brief Resolves parameter definition bindings for Lambda abstractions.
+ * Handles normal variable parameters, curried parameters, and parameter tupling.
+ * 
+ * For parameter tupling (e.g. lambda (x, y). E):
+ * - Introduces a new temporary variable T++
+ * - Standardizes the body to: gamma(lambda x. (gamma(lambda y. E) (gamma T++ 2))) (gamma T++ 1)
+ */
 std::shared_ptr<TreeNode> Standardizer::createLambda(std::shared_ptr<TreeNode> V, std::shared_ptr<TreeNode> E) {
     if (V->type == ",") {
+        // Parameter tupling case: construct temporary tuple extraction logic
         auto T = makeNode("<IDENTIFIER>", "T++");
         auto current_body = E;
         
+        // Extract variables from the comma list
         std::vector<std::shared_ptr<TreeNode>> vars;
         auto v = V->child;
         while (v) {
@@ -19,6 +32,7 @@ std::shared_ptr<TreeNode> Standardizer::createLambda(std::shared_ptr<TreeNode> V
             v = next;
         }
         
+        // Link variable extractions bottom-up (x = T++ 1, y = T++ 2)
         for (int i = (int)vars.size() - 1; i >= 0; --i) {
             auto gamma_app = makeNode("gamma");
             auto lambda_inner = makeNode("lambda");
@@ -43,6 +57,7 @@ std::shared_ptr<TreeNode> Standardizer::createLambda(std::shared_ptr<TreeNode> V
         T->setSibling(current_body);
         return final_lambda;
     } else {
+        // Normal variable/identifier parameter case
         auto final_lambda = makeNode("lambda");
         final_lambda->setChild(V);
         V->setSibling(E);
@@ -50,14 +65,23 @@ std::shared_ptr<TreeNode> Standardizer::createLambda(std::shared_ptr<TreeNode> V
     }
 }
 
+/**
+ * @brief Main entry point. Traverses the tree bottom-up post-order.
+ * @return The root of the standardized tree.
+ */
 std::shared_ptr<TreeNode> Standardizer::standardize(std::shared_ptr<TreeNode> root) {
     if (!root) return nullptr;
     return standardizeNode(root);
 }
 
+/**
+ * @brief Recursive method implementing post-order Sub-Tree Transformational Grammar.
+ * Standardizes each node after its sub-trees have been fully standardized.
+ */
 std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode> node) {
     if (!node) return nullptr;
 
+    // Standardize children first (post-order traversal)
     if (node->child) {
         node->child = standardizeNode(node->child);
     }
@@ -68,6 +92,7 @@ std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode
     std::string t = node->type;
     std::shared_ptr<TreeNode> result = node;
 
+    // 1. Let-Binding: let ( = X E ) P => gamma ( lambda X P ) E
     if (t == "let") {
         auto eq = node->child;
         if (!eq || eq->type != "=") return node;
@@ -83,6 +108,7 @@ std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode
         
         result = gamma;
     }
+    // 2. Where-clause: where P ( = X E ) => gamma ( lambda X P ) E
     else if (t == "where") {
         auto P = node->child;
         auto eq = P->sibling;
@@ -99,6 +125,7 @@ std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode
         
         result = gamma;
     }
+    // 3. Within-clause: within ( = X1 E1 ) ( = X2 E2 ) => = X2 ( gamma ( lambda X1 E2 ) E1 )
     else if (t == "within") {
         auto eq1 = node->child;
         auto eq2 = eq1->sibling;
@@ -122,6 +149,7 @@ std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode
         
         result = new_eq;
     }
+    // 4. Recursive Definition: rec ( = X E ) => = X ( gamma Ystar ( lambda X E ) )
     else if (t == "rec") {
         auto eq = node->child;
         if (!eq || eq->type != "=") return node;
@@ -144,6 +172,7 @@ std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode
         
         result = new_eq;
     }
+    // 5. Function Form: fcn_form P V1..Vn = E => = P ( lambda V1 .. ( lambda Vn E ) )
     else if (t == "fcn_form") {
         auto P = node->child;
         auto V = P->sibling;
@@ -169,6 +198,7 @@ std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode
         P->setSibling(current_body);
         result = new_eq;
     }
+    // 6. Infix Operator: @ E1 N E2 => gamma ( gamma N E1 ) E2
     else if (t == "@") {
         auto E1 = node->child;
         auto N = E1->sibling;
@@ -189,6 +219,7 @@ std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode
         
         result = gamma1;
     }
+    // 7. Simultaneous Definitions: and ( = X1 E1 ) ( = X2 E2 ) => = ( , X1 X2 ) ( tau E1 E2 )
     else if (t == "and") {
         auto new_eq = makeNode("=");
         auto comma = makeNode(",");
@@ -223,6 +254,7 @@ std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode
         
         result = new_eq;
     }
+    // 8. Infix Operator (Duplicate handler present in original codebase for robustness)
     else if (t == "@") {
         auto E1 = node->child;
         auto N = E1->sibling;
@@ -241,6 +273,7 @@ std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode
         
         result = gamma1;
     }
+    // 9. Conditional Expression: -> B T E => gamma ( gamma ( gamma Cond B ) ( lambda () T ) ) ( lambda () E )
     else if (t == "->") {
         auto B = node->child;
         auto T = B->sibling;
@@ -273,6 +306,7 @@ std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode
         
         result = gamma1;
     }
+    // 10. Tuples: tau E1..En => aug list chain (gamma (gamma aug (gamma aug nil E1)) E2)
     else if (t == "tau") {
         std::vector<std::shared_ptr<TreeNode>> children;
         auto c = node->child;
@@ -298,7 +332,7 @@ std::shared_ptr<TreeNode> Standardizer::standardizeNode(std::shared_ptr<TreeNode
         }
         result = res;
     }
-
+    // 11. Multi-Parameter / Curried Lambdas: lambda V1..Vn E => lambda V1 ( lambda V2 .. ( lambda Vn E ) )
     else if (t == "lambda") {
         auto child1 = node->child;
         if (!child1) return node;

@@ -3,22 +3,28 @@
 
 #include <string>
 
+/**
+ * @brief Token categories used by the RPAL Lexer and Parser.
+ */
 enum class TokenType {
-    IDENTIFIER,
-    INTEGER,
-    STRING,
-    OPERATOR,
-    PUNCTUATION,
-    END_OF_FILE,
-    DELETE_TOKEN, // For whitespace and comments that should be ignored
-    UNKNOWN
+    IDENTIFIER,   // Variable names, keywords (let, in, fn, etc.)
+    INTEGER,      // Numeric literals
+    STRING,       // Single-quoted string literals ('...')
+    OPERATOR,     // Math and logic symbols (+, -, *, aug, etc.)
+    PUNCTUATION,  // Syntax markers like parentheses, semicolons, and commas
+    END_OF_FILE,  // Special marker representing end of input
+    DELETE_TOKEN, // Internal token for spaces, tabs, newlines, and comments
+    UNKNOWN       // Error fallback token for invalid characters
 };
 
+/**
+ * @brief Represents a lexical token in the source program.
+ */
 class Token {
 public:
-    std::string value;
-    TokenType type;
-    int lineNumber;
+    std::string value;    // The actual lexeme text
+    TokenType type;       // Categorized token type
+    int lineNumber;       // The line number where this token occurred (1-indexed)
 
     Token(std::string val, TokenType t, int line) : value(val), type(t), lineNumber(line) {}
 };

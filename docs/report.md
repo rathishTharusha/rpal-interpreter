@@ -1,15 +1,17 @@
 # Project Report: Design and Implementation of an RPAL Interpreter
 
 ## Module Information
+
 * **Module Code & Name:** CS 3513 - Programming Languages
 * **Project:** RPAL Interpreter (C++ Implementation)
 * **Team Members:**
   1. **Name:** D. I. R. Tharusha Perera | **Index:** 230475N
-  2. **Name:** [Student 2 Name] | **Index:** [Student 2 Index]
+  2. **Name:** M. P. Kumarasinghe | **Index:** 230356C
 
 ---
 
 ## Table of Contents
+
 1. [Introduction](#1-introduction)
 2. [System Architecture](#2-system-architecture)
 3. [Phase A: Lexical Analysis (Scanner)](#3-phase-a-lexical-analysis-scanner)
@@ -53,10 +55,12 @@ graph TD
 ## 3. Phase A: Lexical Analysis (Scanner)
 
 ### 3.1 Theoretical Background
+
 Lexical analysis is the initial phase of the compiler frontend. The scanner groups characters into logical, atomic sequences called *lexemes*, which are classified into categories called *tokens*.
 A crucial sub-component is the **Screener**, which filters out irrelevant information—specifically whitespace and line/block comments (`//` and `/* ... */`)—to prevent them from complicating the grammar logic in the syntax analysis phase.
 
 ### 3.2 Token Model
+
 The lexical entities are represented in the codebase using `TokenType` and the `Token` class:
 
 ```cpp
@@ -83,6 +87,7 @@ public:
 ```
 
 ### 3.3 Lexer Design & Function Prototypes
+
 The `Lexer` class encapsulates file I/O streams and maintains lookahead tracking to parse characters into tokens. It provides the following interface:
 
 ```cpp
@@ -130,12 +135,14 @@ public:
 ## 4. Phase B: Syntax Analysis & AST Generation (Parser)
 
 ### 4.1 Theoretical Background
+
 The syntax analyzer ensures that the token stream conforms to the formal Phrase Structure Grammar of the RPAL language.
 
 * **Top-Down LL(1) Parsing**: The parser is implemented as a top-down, left-to-right parser with a single token lookahead.
 * **Recursive Descent**: Mutually recursive C++ functions represent each non-terminal rule in the grammar. Each function evaluates its production rules, consumes tokens, and pushes structural components to a parsing stack.
 
 ### 4.2 Abstract Syntax Tree (AST) Representation
+
 The AST is represented using the **First-Child Next-Sibling (FCNS)** binary tree layout. This structure allows us to represent an n-ary tree (where nodes can have an arbitrary number of children) using only two pointers per node:
 
 ```cpp
@@ -159,11 +166,13 @@ public:
 * **Sibling Pointer**: Points to the sibling immediately to the right of the node.
 
 For example, a tree node representing `A` with children `B`, `C`, and `D` is laid out as:
+
 ```text
   [A] -> child -> [B] -> sibling -> [C] -> sibling -> [D] -> sibling -> nullptr
 ```
 
 ### 4.3 Parser Design & Function Prototypes
+
 The `Parser` class handles syntax analysis and tree generation:
 
 ```cpp
@@ -215,6 +224,7 @@ public:
 ```
 
 ### 4.4 Tree Assembly Mechanics
+
 The parser builds the AST bottom-up using `treeStack`. When a grammatical rule resolves that requires combining `n` sub-expressions under a parent node:
 
 1. The parser invokes `buildTree(type, value, n)`.
@@ -228,6 +238,7 @@ The parser builds the AST bottom-up using `treeStack`. When a grammatical rule r
 ## 5. Phase C: Abstract Syntax Tree Standardization (Desugaring)
 
 ### 5.1 Theoretical Background
+
 RPAL is an extension of Lambda Calculus that contains syntactic sugar (e.g. `let` bindings, conditional blocks, recursion markers) for readability. The `Standardizer` desugars the AST into a Standardized Tree (ST). In the final ST:
 
 * All complex elements are transformed.
@@ -235,6 +246,7 @@ RPAL is an extension of Lambda Calculus that contains syntactic sugar (e.g. `let
 * Simultaneous and recursive functions are compiled into functional abstractions.
 
 ### 5.2 Transformation Rules
+
 The following table summarizes the structural mappings applied by the standardizer:
 
 | AST Construct | Input Structure | Standardized Binary Form | Description |
@@ -250,6 +262,7 @@ The following table summarizes the structural mappings applied by the standardiz
 | **Multi-Parameter Lambdas**| `lambda V1..Vn E` | `lambda V1 (lambda V2 .. (lambda Vn E))` | Transforms multi-variable parameters into single-variable curried lambdas. |
 
 ### 5.3 Standardizer Design & Function Prototypes
+
 The `Standardizer` class walks the AST post-order (bottom-up), ensuring that a node's children are fully standardized before it applies transformations to the node itself:
 
 ```cpp
@@ -274,6 +287,7 @@ public:
 ```
 
 ### 5.4 Parameter Tupling vs. Currying
+
 When a function parameter is enclosed in a comma-list (e.g. `lambda (x, y). E`), it denotes parameter tupling. Rather than standardizing to curried lambdas, the standardizer wraps the variables:
 
 1. It introduces a temporary parameter variable `T++`.
@@ -287,6 +301,7 @@ When a function parameter is enclosed in a comma-list (e.g. `lambda (x, y). E`),
 ## 6. Phase D: Execution Engine (CSE Machine)
 
 ### 6.1 Theoretical Background
+
 The Control Stack Evaluator (CSE) Machine is a state machine that evaluates functional expressions using three components:
 
 1. **Control Stack (C)**: A sequence of instructions (operators, variables, markers, and values) to be executed.
@@ -294,6 +309,7 @@ The Control Stack Evaluator (CSE) Machine is a state machine that evaluates func
 3. **Environment Tree (E)**: A hierarchical structure of environments that store variable-to-value bindings. It supports lexical scoping; if a variable lookup fails in the current environment, the engine climbs up parent environments.
 
 ### 6.2 Data Model & Environment Setup
+
 The CSE Machine represents control/stack structures using the `CSEItem` and `Environment` classes:
 
 ```cpp
@@ -334,6 +350,7 @@ public:
 ```
 
 ### 6.3 CSE Machine Class Design
+
 The `CSEMachine` class manages the control stack, value stack, and execution loops:
 
 ```cpp
@@ -371,6 +388,7 @@ public:
 ```
 
 ### 6.4 The 13 Operational Execution Rules
+
 The execution engine pops items from `Control` and applies one of the following rules:
 
 1. **Rule 1: Name Lookup**: If the item is an `IDENTIFIER`, search the active environment tree (`current_env`). Push the bound value onto `Stack`.
@@ -413,6 +431,7 @@ graph TD
 ```
 
 ### CLI Syntax
+
 * **`./rpal20 <filename>`**: Evaluates the RPAL source file and writes execution results to standard output.
 * **`./rpal20 -ast <filename>`**: Displays the original AST and standardized AST in indented form instead of executing the program.
 
@@ -421,6 +440,7 @@ graph TD
 ## 8. Build and Verification Flow
 
 ### 8.1 Compilation
+
 A Makefile manages build automation, compiling source files in `src/` to intermediate object files in `obj/`, and creating the `rpal20` executable in the root directory:
 
 ```bash
@@ -432,6 +452,7 @@ make clean
 ```
 
 ### 8.2 Testing & Parity Verification
+
 We run differential tests to verify correctness against the reference `rpal.exe` compiler. The test suite uses the `test.sh` script to run files through both engines, comparing their console outputs byte-for-byte:
 
 ```bash
@@ -448,33 +469,39 @@ All test cases, including complex programs (e.g. towers of Hanoi, simultaneous v
 ### 9.1 Key Challenges and Technical Resolutions
 
 #### A. Tuple Construction Semantics in `aug`
-The primitive operator `aug` appends an element to a tuple. During testing, recursive list manipulations (such as `pairs1`) caused stack underflows. 
+
+The primitive operator `aug` appends an element to a tuple. During testing, recursive list manipulations (such as `pairs1`) caused stack underflows.
 
 * **The Bug**: If `rand2` was a tuple, the initial implementation unrolled its items rather than keeping the tuple intact and appending the item.
 * **The Resolution**: We updated the `aug` primitive's evaluation logic to check the operand type. If the left operand is a tuple, `aug` creates a new tuple and appends the right operand to the end as a single element, avoiding destructive unrolling.
 
 #### B. `tau` Standardization Conflict
+
 The `tau` operator collects a defined number of values from the stack into a single tuple.
 
 * **The Bug**: Standardizing simultaneous definitions generated `tau` nodes. The CSE machine initially skipped or incorrectly compiled these nodes, resulting in crashes.
 * **The Resolution**: We updated the instruction compilation step to map `tau` nodes to a custom `TUPLE` instruction that records the number of elements. The evaluation loop was modified to intercept this instruction, pop the specified number of items from the value stack, wrap them into a tuple item, and push it back.
 
 #### C. `Conc` Tuple vs. String Semantics
+
 The `Conc` primitive behaves differently depending on whether it receives curried arguments or a tuple.
 
 * **The Bug**: Test programs like `conc.1` produced no output due to mismatched concatenation types.
 * **The Resolution**: We updated the `Conc` handler. If `Conc` receives a single `TUPLE` argument containing string elements, it immediately concatenates all of them into a single string. If it receives a single string, it returns a partially applied `Conc1` operator that waits for the next string operand, ensuring compatibility with both styles.
 
 #### D. Static Scope Delta Index Mapping for Closures
+
 * **The Bug**: When printing closures, the interpreter output `[lambda closure: x: 0]`, whereas the reference interpreter output `[lambda closure: x: 2]`.
 * **The Resolution**: We discovered that the reference compiler prints the static **Delta Index** (representing the lambda body's block index) rather than the runtime environment ID. Updating the print output format to display the static delta index resolved this discrepancy.
 
 ### 9.2 Key Learnings
+
 * **Top-Down Recursive Descent Parsing**: Implementing mutual recursion for the RPAL grammar provided a solid understanding of parser design, predictive parsing, lookahead tracking, and syntax recovery.
 * **Syntactic Sugar and Desugaring**: Studying how complex language structures (like `where` and `let` blocks) map to core Lambda Calculus structures (`lambda` and `gamma`) demonstrated how language features can be desugared into simple primitives.
 * **Virtual Machine Execution**: Building the CSE Machine provided hands-on experience with environment mapping, closures, lexical scoping, and evaluating recursive calls using fixed-point Y-combinators.
 
 ### 9.3 Practical Reflections
+
 * **Differential Testing**: Writing automated regression test scripts (`test.sh`) was crucial for validating the interpreter. It allowed us to quickly catch regressions and verify correctness across multiple files.
 * **Object-Oriented Design**: Using smart pointers (`std::shared_ptr`) for tree node references and environment structures simplified memory management, avoiding leaks and dangling references.
 * **Modular Clean Architecture**: Isolating the Lexer, Parser, Standardizer, and CSE Machine into distinct, single-responsibility classes made the codebase easier to read, test, and debug.
